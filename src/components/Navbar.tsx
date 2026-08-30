@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plane, Search, Clock, ShieldAlert, Compass, Sparkles, MapPin, Radio } from 'lucide-react';
+import { Plane, Search, Clock, ShieldAlert, Compass, Sparkles, MapPin, Radio, Key, RefreshCw } from 'lucide-react';
 import { JejuWeather } from '../types/flight';
 
 interface NavbarProps {
@@ -9,6 +9,10 @@ interface NavbarProps {
   setSearchQuery: (query: string) => void;
   weather: JejuWeather;
   inFlightCount: number;
+  dataSource?: 'KAC_LIVE' | 'SIMULATION';
+  isFetchingFlights?: boolean;
+  onRefreshFlights?: () => void;
+  onOpenApiKeyModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,6 +22,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   setSearchQuery,
   weather,
   inFlightCount,
+  dataSource = 'SIMULATION',
+  isFetchingFlights = false,
+  onRefreshFlights,
+  onOpenApiKeyModal,
 }) => {
   const [timeStr, setTimeStr] = useState('');
   const [dateStr, setDateStr] = useState('');
@@ -48,28 +56,48 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-50 bg-[#111418] border-b border-[#1F242D] shadow-2xl">
       {/* Top telemetry ticker strip */}
-      <div className="bg-[#090B0E] px-4 sm:px-8 py-1.5 text-xs border-b border-[#1F242D] flex flex-wrap items-center justify-between text-[#E0E2E5]/70 tracking-widest uppercase text-[10px]">
-        <div className="flex items-center space-x-4 flex-wrap">
+      <div className="bg-[#090B0E] px-3 sm:px-8 py-1.5 text-xs border-b border-[#1F242D] flex flex-wrap items-center justify-between text-[#E0E2E5]/70 tracking-widest uppercase text-[10px]">
+        <div className="flex items-center space-x-3 sm:space-x-4 flex-wrap">
           <span className="flex items-center text-[#C5A36A] font-semibold">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#C5A36A] shadow-[0_0_8px_#C5A36A] animate-pulse mr-1.5" />
             CJU / RKPC TOWER ACTIVE
           </span>
-          <span className="hidden sm:inline-flex items-center text-[#E0E2E5]/80 font-mono">
+
+          {/* KAC Live connection pill */}
+          <button
+            onClick={onOpenApiKeyModal}
+            className={`px-2 py-0.5 border flex items-center gap-1.5 text-[9px] font-mono tracking-wider transition-all ${
+              dataSource === 'KAC_LIVE'
+                ? 'bg-emerald-950/70 border-emerald-500 text-emerald-300 font-bold shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                : 'bg-[#161B22] border-[#C5A36A]/50 text-[#C5A36A] hover:border-[#C5A36A]'
+            }`}
+            title="클릭하여 공공데이터포털 KAC API 키 설정"
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${dataSource === 'KAC_LIVE' ? 'bg-emerald-400 animate-ping' : 'bg-[#C5A36A]'}`} />
+            <span>{dataSource === 'KAC_LIVE' ? 'KAC 실시간 연동 LIVE' : '시뮬레이션 모드 (API 키 설정)'}</span>
+            <Key className="w-2.5 h-2.5 opacity-70" />
+          </button>
+
+          {onRefreshFlights && (
+            <button
+              onClick={onRefreshFlights}
+              title="운항 데이터 실시간 새로고침"
+              className="text-[#E0E2E5]/50 hover:text-[#C5A36A] transition-colors p-0.5"
+            >
+              <RefreshCw className={`w-3 h-3 ${isFetchingFlights ? 'animate-spin text-[#C5A36A]' : ''}`} />
+            </button>
+          )}
+
+          <span className="hidden md:inline-flex items-center text-[#E0E2E5]/80 font-mono">
             📅 {dateStr}
           </span>
-          <span className="hidden md:inline-flex items-center text-[#E0E2E5]/80">
+          <span className="hidden lg:inline-flex items-center text-[#E0E2E5]/80">
             <Compass className="w-3 h-3 mr-1 text-[#C5A36A]" />
             WIND {weather.windDirectionDeg}° / {weather.windSpeedKt}KT (GUST {weather.gustKt}KT)
           </span>
-          {weather.windshearStatus !== 'NORMAL' && (
-            <span className="hidden md:inline-flex items-center text-[#C5A36A] bg-[#161B22] px-2 py-0.5 border border-[#C5A36A]/40 font-serif italic text-[11px]">
-              <ShieldAlert className="w-3 h-3 mr-1 text-[#C5A36A]" />
-              WINDSHEAR ADVISORY
-            </span>
-          )}
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3 sm:space-x-4">
           <span className="text-[#E0E2E5]/70">
             AIRBORNE: <strong className="text-[#C5A36A] font-mono">{inFlightCount} FLIGHTS</strong>
           </span>

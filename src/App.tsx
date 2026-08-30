@@ -1,29 +1,71 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { FlightItem, JejuWeather } from './types/flight';
-import { createInitialFlights } from './data/mockFlights';
 import { INITIAL_JEJU_WEATHER, getPositionAlongRoute } from './utils/flightSimulation';
+import { fetchLiveFlights, FetchFlightsResult } from './services/flightApi';
 import { Navbar } from './components/Navbar';
 import { WeatherBanner } from './components/WeatherBanner';
 import { FlightBoard } from './components/FlightBoard';
 import { RadarMap } from './components/RadarMap';
 import { SeatMapViewer } from './components/SeatMapViewer';
 import { JejuResidentHub } from './components/JejuResidentHub';
+import { ApiKeyModal } from './components/ApiKeyModal';
 import { Plane, Radio, Clock, Sparkles, MapPin } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'BOARD' | 'RADAR' | 'SEAT' | 'RESIDENT'>('BOARD');
-  const [flights, setFlights] = useState<FlightItem[]>(() => createInitialFlights());
-  const [selectedFlight, setSelectedFlight] = useState<FlightItem | null>(() => {
-    const list = createInitialFlights();
-    return list.find((f) => ['DEPARTED', 'APPROACHING'].includes(f.status)) || list[0];
-  });
+  const [flights, setFlights] = useState<FlightItem[]>([]);
+  const [selectedFlight, setSelectedFlight] = useState<FlightItem | null>(null);
   const [selectedSeatAircraft, setSelectedSeatAircraft] = useState<string>('B737-800');
   const [searchQuery, setSearchQuery] = useState('');
   const [weather, setWeather] = useState<JejuWeather>(INITIAL_JEJU_WEATHER);
   const [isSimulating, setIsSimulating] = useState(true);
   const [simulationSpeed, setSimulationSpeed] = useState(1);
 
-  // Real-time Flight advancement ticker
+  // KAC Live API state
+  const [dataSource, setDataSource] = useState<'KAC_LIVE' | 'SIMULATION'>('SIMULATION');
+  const [isFetchingFlights, setIsFetchingFlights] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const isInitialLoadRef = useRef(true);
+
+  // Load flights from KAC API or fallback simulation
+  const loadFlightData = useCallback(async (customKey?: string) => {
+    setIsFetchingFlights(true);
+    try {
+      const result: FetchFlightsResult = await fetchLiveFlights(customKey);
+      setDataSource(result.source);
+      setFlights(result.flights);
+
+      // Set initial selected flight if none or not found
+      setSelectedFlight((prev) => {
+        if (!prev) {
+          return (
+            result.flights.find((f) => ['DEPARTED', 'APPROACHING'].includes(f.status)) ||
+            result.flights[0] ||
+            null
+          );
+        }
+        const updated = result.flights.find((f) => f.flightNumber === prev.flightNumber);
+        return updated || prev;
+      });
+    } catch (err) {
+      console.error('Failed to load flight data:', err);
+    } finally {
+      setIsFetchingFlights(false);
+    }
+  }, []);
+
+  // Initial load and 60s periodic polling
+  useEffect(() => {
+    loadFlightData();
+
+    const pollInterval = setInterval(() => {
+      loadFlightData();
+    }, 60000); // Poll every 60s
+
+    return () => clearInterval(pollInterval);
+  }, [loadFlightData]);
+
+  // Real-time Flight advancement ticker (1s interval)
   useEffect(() => {
     if (!isSimulating) return;
 
@@ -100,6 +142,10 @@ export default function App() {
     }));
   };
 
+  const handleSaveApiKey = (newKey: string) => {
+    loadFlightData(newKey);
+  };
+
   const inFlightCount = flights.filter((f) => ['DEPARTED', 'APPROACHING'].includes(f.status)).length;
 
   return (
@@ -112,6 +158,10 @@ export default function App() {
         setSearchQuery={setSearchQuery}
         weather={weather}
         inFlightCount={inFlightCount}
+        dataSource={dataSource}
+        isFetchingFlights={isFetchingFlights}
+        onRefreshFlights={() => loadFlightData()}
+        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
       />
 
       {/* Main Content Body */}
@@ -167,6 +217,14 @@ export default function App() {
 
         {activeTab === 'RESIDENT' && <JejuResidentHub />}
       </main>
+
+      {/* API Key Modal */}
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        onSave={handleSaveApiKey}
+        dataSource={dataSource}
+      />
 
       {/* Bottom Footer */}
       <footer className="bg-[#090B0E] border-t border-[#1F242D] py-6 px-4 text-xs text-[#E0E2E5]/40 text-center font-mono">

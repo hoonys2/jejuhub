@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { FlightItem, JejuWeather } from './types/flight';
 import { INITIAL_JEJU_WEATHER, getPositionAlongRoute } from './utils/flightSimulation';
 import { fetchLiveFlights, FetchFlightsResult } from './services/flightApi';
@@ -9,7 +9,7 @@ import { RadarMap } from './components/RadarMap';
 import { SeatMapViewer } from './components/SeatMapViewer';
 import { JejuResidentHub } from './components/JejuResidentHub';
 import { ApiKeyModal } from './components/ApiKeyModal';
-import { Plane, Radio, Clock, Sparkles, MapPin } from 'lucide-react';
+import { Radio } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'BOARD' | 'RADAR' | 'SEAT' | 'RESIDENT'>('BOARD');
@@ -25,7 +25,7 @@ export default function App() {
   const [dataSource, setDataSource] = useState<'KAC_LIVE' | 'SIMULATION'>('SIMULATION');
   const [isFetchingFlights, setIsFetchingFlights] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-  const isInitialLoadRef = useRef(true);
+  const [apiStatusMessage, setApiStatusMessage] = useState<string>('');
 
   // Load flights from KAC API or fallback simulation
   const loadFlightData = useCallback(async (customKey?: string) => {
@@ -34,6 +34,7 @@ export default function App() {
       const result: FetchFlightsResult = await fetchLiveFlights(customKey);
       setDataSource(result.source);
       setFlights(result.flights);
+      setApiStatusMessage(result.message || '');
 
       // Set initial selected flight if none or not found
       setSelectedFlight((prev) => {
@@ -47,8 +48,9 @@ export default function App() {
         const updated = result.flights.find((f) => f.flightNumber === prev.flightNumber);
         return updated || prev;
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load flight data:', err);
+      setApiStatusMessage(err.message || 'API 호출 실패');
     } finally {
       setIsFetchingFlights(false);
     }
@@ -218,12 +220,13 @@ export default function App() {
         {activeTab === 'RESIDENT' && <JejuResidentHub />}
       </main>
 
-      {/* API Key Modal */}
+      {/* API Key Modal with Live Diagnostic Message */}
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
         onClose={() => setIsApiKeyModalOpen(false)}
         onSave={handleSaveApiKey}
         dataSource={dataSource}
+        apiStatusMessage={apiStatusMessage}
       />
 
       {/* Bottom Footer */}

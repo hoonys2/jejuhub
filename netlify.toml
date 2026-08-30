@@ -3,14 +3,19 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 [build.environment]
   NODE_VERSION = "20"
 
-# API Route proxy to Netlify Functions
+# API Route proxy to Netlify Functions (force = true ensures function executes before SPA rewrite)
 [[redirects]]
   from = "/api/flights"
   to = "/.netlify/functions/flights"
   status = 200
+  force = true
 
 # SPA fallback
 [[redirects]]

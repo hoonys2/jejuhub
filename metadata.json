@@ -1,0 +1,6 @@
+{
+  "name": "제주 플라이트 허브 (Jeju Flight Hub)",
+  "description": "제주 거주민을 위한 실시간 항공기 출도착 운항정보, Flightradar24 스타일 비행경로 레이더 추적 및 항공사별 기종 좌석배치도 통합 서비스",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

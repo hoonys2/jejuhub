@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* Sophisticated Dark theme variables & font utility */
+@layer utilities {
+  .font-serif-luxury {
+    font-family: 'Cormorant Garamond', Georgia, Cambria, "Times New Roman", Times, serif;
+  }
+  .font-display-luxury {
+    font-family: 'Cinzel', 'Cormorant Garamond', Georgia, serif;
+  }
+}
+
+/* Leaflet dark styling refinements for Sophisticated Dark */
+.leaflet-container {
+  background-color: #07090C !important;
+  font-family: inherit;
+}
+
+.custom-plane-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-airport-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-leaflet-tooltip {
+  background: rgba(17, 20, 24, 0.96) !important;
+  border: 1px solid rgba(197, 163, 106, 0.4) !important;
+  color: #E0E2E5 !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7) !important;
+  font-size: 0.75rem !important;
+  padding: 0.4rem 0.6rem !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #090B0E;
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #1F242D;
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #C5A36A;
+}
+

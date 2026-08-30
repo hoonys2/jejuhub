@@ -4,6 +4,11 @@ import path from 'path';
 import { defineConfig, Plugin } from 'vite';
 import { XMLParser } from 'fast-xml-parser';
 
+const KAC_ENDPOINTS = [
+  'http://openapi.airport.co.kr/service/rest/FlightStatusList/getFlightStatusList',
+  'https://apis.data.go.kr/1613000/FlightStatusList/getFlightStatusList',
+];
+
 // Local Vite Dev Server Middleware for /api/flights
 function localKacApiPlugin(): Plugin {
   return {
@@ -16,12 +21,15 @@ function localKacApiPlugin(): Plugin {
 
         const urlObj = new URL(req.url, 'http://localhost:3000');
         const keyParam = urlObj.searchParams.get('key');
-        const apiKey =
+        const apiKey = (
           process.env.KAC_API_KEY ||
+          process.env.kac_api_key ||
           process.env.PUBLIC_DATA_PORTAL_KEY ||
+          process.env.SERVICE_KEY ||
           process.env.VITE_KAC_API_KEY ||
           keyParam ||
-          '';
+          ''
+        ).trim();
 
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -38,42 +46,102 @@ function localKacApiPlugin(): Plugin {
         }
 
         try {
-          const KAC_ENDPOINT = 'http://openapi.airport.co.kr/service/rest/FlightStatusList/getFlightStatusList';
+          const fetchKacRobust = async (ioType: 'O' | 'I') => {
+            const candidateKeys = [
+              apiKey,
+              decodeURIComponent(apiKey),
+              encodeURIComponent(decodeURIComponent(apiKey)),
+            ];
+            const uniqueKeys = Array.from(new Set(candidateKeys));
 
-          const fetchKac = async (ioType: 'O' | 'I') => {
-            const targetUrl = new URL(KAC_ENDPOINT);
-            targetUrl.searchParams.set('serviceKey', decodeURIComponent(apiKey));
-            targetUrl.searchParams.set('schAirCode', 'CJU');
-            targetUrl.searchParams.set('schLineType', 'D');
-            targetUrl.searchParams.set('schIOType', ioType);
-            targetUrl.searchParams.set('numOfRows', '100');
-            targetUrl.searchParams.set('pageNo', '1');
-            targetUrl.searchParams.set('_type', 'json');
+            let lastError = '';
 
-            const kacRes = await fetch(targetUrl.toString(), {
-              headers: { Accept: 'application/json, text/xml, */*' },
-            });
-            const text = await kacRes.text();
-            try {
-              const json = JSON.parse(text);
-              const items = json?.response?.body?.items?.item;
-              if (Array.isArray(items)) return items;
-              if (items && typeof items === 'object') return [items];
-              return [];
-            } catch {
-              const parser = new XMLParser({ ignoreAttributes: false });
-              const parsed = parser.parse(text);
-              const items = parsed?.response?.body?.items?.item;
-              if (Array.isArray(items)) return items;
-              if (items && typeof items === 'object') return [items];
-              return [];
+            for (const endpoint of KAC_ENDPOINTS) {
+              for (const keyToTry of uniqueKeys) {
+                const paramVariants = [
+                  `serviceKey=${keyToTry}&schAirCode=CJU&schLineType=D&schIOType=${ioType}&numOfRows=100&pageNo=1`,
+                  `serviceKey=${keyToTry}&schAirCode=CJU&schLineType=D&schIOType=${ioType}&numOfRows=100&pageNo=1&_type=json`,
+                ];
+
+                for (const params of paramVariants) {
+                  try {
+                    const fullUrl = `${endpoint}?${params}`;
+                    const kacRes = await fetch(fullUrl, {
+                      headers: { Accept: 'text/xml, application/xml, application/json, */*' },
+                    });
+                    const rawText = await kacRes.text();
+
+                    if (!kacRes.ok) {
+                      lastError = `HTTP ${kacRes.status} ${kacRes.statusText}`;
+                      continue;
+                    }
+
+                    if (rawText.trim().startsWith('{')) {
+                      try {
+                        const json = JSON.parse(rawText);
+                        const header = json?.response?.header;
+                        if (header?.resultCode && header.resultCode !== '00' && header.resultCode !== '0') {
+                          lastError = `[KAC ${header.resultCode}] ${header.resultMsg || 'API Error'}`;
+                          continue;
+                        }
+                        const items = json?.response?.body?.items?.item;
+                        if (Array.isArray(items)) return { items };
+                        if (items && typeof items === 'object') return { items: [items] };
+                        if (json?.response?.body?.items === '') return { items: [] };
+                      } catch {
+                        // ignore
+                      }
+                    }
+
+                    if (rawText.trim().startsWith('<')) {
+                      const parser = new XMLParser({ ignoreAttributes: false });
+                      const parsed = parser.parse(rawText);
+
+                      const cmmMsg = parsed?.OpenAPI_ServiceResponse?.cmmMsgHeader;
+                      if (cmmMsg) {
+                        lastError = `[공공데이터포털] ${cmmMsg.returnAuthMsg || cmmMsg.errMsg || '인증키 에러'}`;
+                        continue;
+                      }
+
+                      const header = parsed?.response?.header;
+                      if (header?.resultCode && header.resultCode !== '00' && header.resultCode !== 0 && header.resultCode !== '0') {
+                        lastError = `[KAC ${header.resultCode}] ${header.resultMsg || 'API Error'}`;
+                        continue;
+                      }
+
+                      const items = parsed?.response?.body?.items?.item;
+                      if (Array.isArray(items)) return { items };
+                      if (items && typeof items === 'object') return { items: [items] };
+                      if (parsed?.response?.body?.items === '') return { items: [] };
+                    }
+                  } catch (e: any) {
+                    lastError = e.message;
+                  }
+                }
+              }
             }
+            return { items: [], error: lastError };
           };
 
-          const [depItems, arrItems] = await Promise.all([fetchKac('O'), fetchKac('I')]);
+          const [depResult, arrResult] = await Promise.all([fetchKacRobust('O'), fetchKacRobust('I')]);
+
+          if (depResult.error && arrResult.error) {
+            res.statusCode = 200;
+            res.end(
+              JSON.stringify({
+                status: 'API_ERROR',
+                message: depResult.error || arrResult.error,
+                keyLength: apiKey.length,
+                keyPrefix: apiKey.slice(0, 5) + '...',
+                data: [],
+              })
+            );
+            return;
+          }
+
           const combined = [
-            ...depItems.map((item: any) => ({ ...item, ioType: 'DEPARTURE' })),
-            ...arrItems.map((item: any) => ({ ...item, ioType: 'ARRIVAL' })),
+            ...(depResult.items || []).map((item: any) => ({ ...item, ioType: 'DEPARTURE' })),
+            ...(arrResult.items || []).map((item: any) => ({ ...item, ioType: 'ARRIVAL' })),
           ];
 
           res.statusCode = 200;
@@ -83,6 +151,7 @@ function localKacApiPlugin(): Plugin {
               source: 'KAC_LIVE',
               updatedAt: new Date().toISOString(),
               totalCount: combined.length,
+              keyLength: apiKey.length,
               data: combined,
             })
           );
